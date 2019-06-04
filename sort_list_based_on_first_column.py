@@ -1,6 +1,4 @@
-xs = [1467153, 1466231, 1478821]
-ys = [12309, 21300, 10230]
-l = sorted(zip(xs, ys), key=lambda x: x[0])
-print(l)
-
-#you can also change zip(xs,ys) into an existing list
+from operator import itemgetter
+L=[[0, 1, 'f'], [4, 2, 't'], [9, 4, 'afsd']]
+sorted(L, key=itemgetter(2))
+#[[9, 4, 'afsd'], [0, 1, 'f'], [4, 2, 't']]

@@ -9,6 +9,7 @@ from sklearn.externals import joblib #use to save the model as .SAV
 from sklearn.metrics import accuracy_score, confusion_matrix
 import rasterio
 from rasterio.transform import from_origin
+from operator import itemgetter
 
 # Tell GDAL to throw Python exceptions, and register all drivers
 """
@@ -27,8 +28,6 @@ imp.reload(main)
 
 #read the class of each data sample
 def read_class(tabular_data, gt_array_file):
-	#I commented all the syntax using DBF5 library with "##"
-
 	#tabular_data = 'the path of the DBF file', 
 	#gt_array_file = 'the path of the output .npy file'
 	#.npy = Numpy array file
@@ -39,19 +38,14 @@ def read_class(tabular_data, gt_array_file):
 	matching the feature class with the respective Reflectance (in extract_values).
 	I gave the $id column in QGIS so there is no code line for that here.
 	"""
-
-	## dbf = Dbf5(tabular_data) # tabular_data = '/location/test.dbf'
-	#convert DBF into Pandas dataframe
-	## df = dbf.to_dataframe()
 	
-	#using geopandas
 	#read the DBF file
 	table = gpd.read_file(tabular_data)
 	#convert to pandas dataframe
 	df = pd.DataFrame(table)
 
 	#get Feature ID (FID) and Class ID (Id)
-	class_id = df[['FID', 'Id']] #[] == __getitem__ syntax
+	class_id = df[['FID', 'gridcode']] #[] == __getitem__ syntax
 
 	#convert from Pandas dataframe into Numpy array
 	a = class_id.values
@@ -105,32 +99,28 @@ def extract_values(rasterband, shp, raster):
 		#append the values
 		li_values.append([feat_id, intval[0]]) #this results in a list
 		
-		li_band = list()
-			for row in li_values:
-				li_band.append(row[1])
-		#convert the list into numpy array
-		#a = np.array(li_values).astype(gdal_array.GDALTypeCodeToNumericTypeCode
-		#	(img_ds.GetRasterBand(1).DataType))
-		#sort the array by FID
-		#a = a[a[:,0].argsort(kind='mergesort')]
+		#sort the list by FID
+		li_sort = sorted(li_values, key = itemgetter(0))
+
 		#take out only the class ID (eliminate the FID)
-		#band_values = a[:,1]
-    	#band_values = band_values.ravel()
+		li_class = [row[1] for row in li_sort]
 
 	src_ds = None
 	img_ds = None
 
-	return(li_band)
+	return(li_class)
 
-def stack_arrays(shp, raster)
+def stack_values(shp, raster):
 	img_ds = gdal.Open(raster)
 	
+	a = img_ds.RasterCount
 	c = list()
-	for band in range(img_ds.shape[2]+1):
+	for band in range(1,a+1): #using Python index
 		b = extract_values(band, shp, raster)
 		c.append(b)
-		multiband = np.array(c).astype(gdal_array.GDALTypeCodeToNumericTypeCode
-			(img_ds.GetRasterBand(1).DataType))
+		d = np.array(c).astype(gdal_array.GDALTypeCodeToNumericTypeCode
+			(img_ds.GetRasterBand(band).DataType))
+		multiband = d.reshape(-1,d.shape[1]).transpose()
 
 	img_ds = None
 
@@ -145,23 +135,8 @@ def read_img(TSXimage, multiband_array, multiband_array_file):
 	img = np.zeros((img_ds.RasterYSize, img_ds.RasterXSize, img_ds.RasterCount), 
 		gdal_array.GDALTypeCodeToNumericTypeCode(img_ds.GetRasterBand(1).DataType))
 
-	"""
-	List of data types in GDAL
-	{
-	  "uint8": 1,
-	  "int8": 1,
-	  "uint16": 2,
-	  "int16": 3,
-	  "uint32": 4,
-	  "int32": 5,
-	  "float32": 6,
-	  "float64": 7,
-	  "complex64": 10,
-	  "complex128": 11,
-	}
-	"""
 	#loop over all bands in dataset
-	for band in range(img.shape[2]):
+	for band in range(img.shape[2]): #using GDAL index
 		img[:,:,band] = img_ds.GetRasterBand(band+1).ReadAsArray()
 
 	#you can check how many pixels were not zero using: (img > 0).sum()
@@ -190,18 +165,19 @@ def train_rf(trees, maxfeatures, train_array, gt_array, model_sav, img,
 
 	#if you would like to save the model, uncomment the command bellow:
 	#joblib.dump(rf, model_sav)
-
+"""
 	#calculate band importance (will be printed)
 	bands = [1, 2, 3, 4]
 
 	for b, imp in zip(bands, rf.feature_importances_):
     	print('Band {b} importance: {imp}'.format(b=b, imp=imp))
-
+"""
 	result_array = rf.predict(img)
 	np.save(result_array_file, result_array)
 
 	return(result_array)
 
+"""
 #this is ONLY to see the feature importance WITHOUT model prediction
 def vim(trees, maxfeatures, train_array, gt_array):
 	#trees = the number of Random Forest trees
@@ -217,7 +193,7 @@ def vim(trees, maxfeatures, train_array, gt_array):
 
 	for b, imp in zip(bands, rf.feature_importances_):
 		print('Band {b} importance: {imp}'.format(b=b, imp=imp))
-
+"""
 
 #make raster file from the result
 def rasterize(img_path, result_array, result_raster):
@@ -276,6 +252,7 @@ def rasterize(img_path, result_array, result_raster):
 	#then call the extract_values function!!
 	#output: test_array
 
+"""
 def test_accuracy(test_array, gt_test_array):
 	#year = the classification year
 	#trees = the number of Random Forest trees
@@ -287,3 +264,4 @@ def test_accuracy(test_array, gt_test_array):
 
 	print 'The overall accuracy is: ',a
 	print(b)
+"""
