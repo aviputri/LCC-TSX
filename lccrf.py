@@ -1,3 +1,6 @@
+# Import the Python 3 print function
+from __future__ import print_function
+
 import pandas as pd
 import geopandas as gpd
 #from simpledbf import Dbf5 #use to read DBF files
@@ -110,7 +113,7 @@ def extract_values(rasterband, shp, raster):
 
 	return(li_class)
 
-def stack_values(shp, raster):
+def stack_values(shp, raster, multibandfile):
 	img_ds = gdal.Open(raster)
 	
 	a = img_ds.RasterCount
@@ -124,10 +127,13 @@ def stack_values(shp, raster):
 
 	img_ds = None
 
+	# save into .npy
+	np.save(multibandfile, multiband) #save = '/location/array.npy'
+
 	return(multiband)
 
 #read the multispectral raster and covert it into Numpy array
-def read_img(TSXimage, multiband_array, multiband_array_file):
+def read_img(TSXimage, multiband_array_file):
 	#TSXimage = path of the TSX image
 	img_ds = gdal.Open(TSXimage, gdal.GA_ReadOnly)
 
@@ -149,8 +155,7 @@ def read_img(TSXimage, multiband_array, multiband_array_file):
 	return(multiband_array)	
 
 #train the random forest and predict images
-def train_rf(trees, maxfeatures, train_array, gt_array, model_sav, img, 
-	result_array_file):
+def train_rf(trees, train_multiband_array, train_class_array, model_sav):
 	#trees = the number of Random Forest trees
 	#maxfeatures = max number of features for the split (I chose None to not limit the features)
 	#train_array = the band training sample in the form of Numpy array 
@@ -160,40 +165,29 @@ def train_rf(trees, maxfeatures, train_array, gt_array, model_sav, img,
 	#result_array_file = 'the path of the prediction result in the form of Numpy array'
 
 	rf = RandomForestClassifier(n_estimators = trees, min_samples_split = 10, 
-		max_features = maxfeatures, oob_score=False)
-	rf = rf.fit(train_array, gt_array)
+		max_features = None, oob_score=False)
+	rf = rf.fit(train_multiband_array, train_class_array)
 
-	#if you would like to save the model, uncomment the command bellow:
-	#joblib.dump(rf, model_sav)
-"""
-	#calculate band importance (will be printed)
-	bands = [1, 2, 3, 4]
+	#print band importance
+	a = train_multiband_array.shape[1]
+	bands = list(range(1,a+1))
 
-	for b, imp in zip(bands, rf.feature_importances_):
-    	print('Band {b} importance: {imp}'.format(b=b, imp=imp))
-"""
+	for b, impo in zip(bands, rf.feature_importances_):
+		print('Band {b} importance: {impo}'.format(b=b, impo=impo))
+
+	return(rf)
+
+def predict_rf(rf, img, result_array_file):
+	#rf = the model returned from train_rf
+	#img = the multiband array either from stack_values or read_img
+	#result_array_file = path of the prediction result array
+
+	
 	result_array = rf.predict(img)
 	np.save(result_array_file, result_array)
 
 	return(result_array)
 
-"""
-#this is ONLY to see the feature importance WITHOUT model prediction
-def vim(trees, maxfeatures, train_array, gt_array):
-	#trees = the number of Random Forest trees
-	#maxfeatures = max number of features for the split (I chose None to not limit the features)
-	#train_array = the band training sample in the form of Numpy array 
-	#gt_array = the Class ID training sample in the form of Numpy array 
-
-	rf = RandomForestClassifier(n_estimators = trees, min_samples_split = 10, 
-		max_features = maxfeatures, oob_score=False)
-	rf = rf.fit(train_array, gt_array)
-
-	bands = [1, 2, 3, 4]
-
-	for b, imp in zip(bands, rf.feature_importances_):
-		print('Band {b} importance: {imp}'.format(b=b, imp=imp))
-"""
 
 #make raster file from the result
 def rasterize(img_path, result_array, result_raster):
@@ -258,8 +252,10 @@ def test_accuracy(test_array, gt_test_array):
 	#test_array = the prediction result in the form of Numpy array
 	#rgt_test_array = the Class ID test sample in the form of Numpy array
 
-	a = accuracy_score(gt_test_array, test_array)
-	b = confusion_matrix(gt_test_array, test_array, labels=list(range(1,n_classes+1))
+	n_class = np.amax(gt_test_array)
 
-	print 'The overall accuracy is: ',a
+	a = accuracy_score(gt_test_array, test_array)
+	b = confusion_matrix(gt_test_array, test_array, labels=list(range(1,n_class+1)))
+
+	print('The overall accuracy is: {a}'.format(a=a))
 	print(b)
